@@ -1,152 +1,191 @@
-import { useEffect } from 'react'
-import './App.css'
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-import Stats from 'three/examples/jsm/libs/stats.module';
 
-// import GLTFLoader
+import { useEffect } from 'react';
+
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { CCDIKSolver, CCDIKHelper } from 'three/addons/animation/CCDIKSolver.js';
+import Stats from 'three/addons/libs/stats.module.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+
+let scene, camera, renderer, orbitControls, transformControls;
+let mirrorSphereCamera;
+
+const OOI = {};
+let IKSolver;
+
+let stats, gui, conf;
+const v0 = new THREE.Vector3();
 
 function App() {
   useEffect(() => {
-    const scene = new THREE.Scene();
+    conf = {
+      followSphere: false,
+      turnHead: true,
+      ik_solver: true,
+      update: updateIK
+    };
 
-    const textureLoader = new THREE.TextureLoader()
-    scene.background = textureLoader.load('/src/assets/the-legend-of-zelda-tears-of-the-kingdom-wallpapers.jpg')
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0xffffff, .17);
+    scene.background = new THREE.Color(0xdddddd);
 
+    camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.001, 5000);
+    camera.position.set(0.9728517749133652, 1.1044765132727201, 0.7316689528482836);
+    camera.lookAt(scene.position);
 
-    const camera = new THREE.PerspectiveCamera(
-      50,
-      window.innerWidth / window.innerHeight,
-      1,
-      500
-    );
-
-    camera.position.z = 96;
-
-    const canvas = document.getElementById('myThreeJsCanvas');
-    const renderer = new THREE.WebGLRenderer(
-      {
-        canvas,
-        antialias: true,
-      }
-    );
-
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
-
-    // ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    ambientLight.castShadow = true;
+    const ambientLight = new THREE.AmbientLight(0xffffff, 8); // soft white light
     scene.add(ambientLight);
 
-    // spot light
-    const spotLight = new THREE.SpotLight(0xffffff, 1);
-    spotLight.castShadow = true;
-    spotLight.position.set(0, 64, 32);
-    scene.add(spotLight);
+    renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.useLegacyLights = false;
+    document.body.appendChild(renderer.domElement);
 
-    // object
-    const boxGeometry = new THREE.BoxGeometry(10, 10, 10, 16, 16, 16);
-    const boxMaterial = new THREE.MeshNormalMaterial({ 'wireframe': true });
-    const boxMesh = new THREE.Mesh(boxGeometry, boxMaterial);
-    boxMesh.position.x = -10
-    scene.add(boxMesh);
-
-    // adding geometry to scene
-    const cylinderGeometry = new THREE.CylinderGeometry(5, 5, 10, 16, 16)
-    const cylinderMaterial = new THREE.MeshNormalMaterial({ 'wireframe': true });
-    const cylinderMesh = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
-    cylinderMesh.position.x = 10
-    scene.add(cylinderMesh);
-
-    // // adding background 
-
-    // const bgGeometry = new THREE.PlaneGeometry(window.innerWidth, window.innerHeight);
-
-    // var textureLoader = new THREE.TextureLoader();
-    // var texture = textureLoader.load('/src/assets/the-legend-of-zelda-tears-of-the-kingdom-wallpapers.jpg');
-
-    // const bgMaterial = new THREE.MeshBasicMaterial({ map: texture });
-
-    // var textureMesh = new THREE.Mesh(bgGeometry, bgMaterial)
-
-    // textureMesh.position.z = -100
-
-    // scene.add(textureMesh)
-
-    // adding ground
-    const groundGeometry = new THREE.PlaneGeometry(window.innerWidth, window.innerHeight)
-
-    var groundTextureLoader = new THREE.TextureLoader();
-    var groundTexture = groundTextureLoader.load('/src/assets/ground_grass.png');
-
-    const groundMaterial = new THREE.MeshBasicMaterial({ map: groundTexture })
-    const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial)
-    groundMesh.rotation.x = -Math.PI / 2
-    groundMesh.position.y = -10
-
-
-
-    // adding walls
-    const wallGeometry1 = new THREE.PlaneGeometry(window.innerWidth, window.innerHeight)
-    const wallMaterial1 = new THREE.MeshBasicMaterial({ color: 0xffffff })
-    const wall1 = new THREE.Mesh(wallGeometry1, wallMaterial1)
-    wall1.rotation.y = Math.PI / 2
-    wall1.position.x = -150
-
-
-    // adding walls
-    const wallGeometry2 = new THREE.PlaneGeometry(window.innerWidth, window.innerHeight)
-    const wallMaterial2 = new THREE.MeshBasicMaterial({ color: 0xffffff })
-    const wall2 = new THREE.Mesh(wallGeometry2, wallMaterial2)
-    wall2.rotation.y = -Math.PI / 2
-    wall2.position.x = 150
-
-
-    scene.add(groundMesh)
-    // scene.add(wall1)
-    // scene.add(wall2)
-
-    // add orbit controls
-    const controls = new OrbitControls(camera, renderer.domElement);
-
-    controls.minDistance = 20;
-    controls.maxDistance = 100;
-    controls.enableDamping = true;
-
-    // add fps stats
-    const stats = Stats();
+    stats = new Stats();
     document.body.appendChild(stats.dom);
 
-    // load gltf model
-    const modelLoader = new GLTFLoader();
-    modelLoader.load('/src/assets/ocarina_of_time_link.glb', function (gltf) {
-      gltf.scene.position.set(10, -10, 10)
-      scene.add(gltf.scene);
-    }, undefined, function (error) {
-      console.log(error);
+    orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.minDistance = 0.2;
+    orbitControls.maxDistance = 1.5;
+    orbitControls.enableDamping = true;
+
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('jsm/libs/draco/');
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.setDRACOLoader(dracoLoader);
+
+    const gltf = gltfLoader.load('models/gltf/kira.glb');
+    gltf.scene.traverse(n => {
+
+      if (n.name === 'head') OOI.head = n;
+      if (n.name === 'lowerarm_l') OOI.lowerarm_l = n;
+      if (n.name === 'Upperarm_l') OOI.Upperarm_l = n;
+      if (n.name === 'hand_l') OOI.hand_l = n;
+      if (n.name === 'target_hand_l') OOI.target_hand_l = n;
+
+      if (n.name === 'boule') OOI.sphere = n;
+      if (n.name === 'Kira_Shirt_left') OOI.kira = n;
+
     });
+    scene.add(gltf.scene);
 
-    const axesHelper = new THREE.AxesHelper(window.innerWidth, window.innerHeight);
-    scene.add(axesHelper);
+    orbitControls.target.copy(OOI.sphere.position); // orbit controls lookAt the sphere
+    OOI.hand_l.attach(OOI.sphere);
 
+    // mirror sphere cube-camera
+    const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(1024);
+    mirrorSphereCamera = new THREE.CubeCamera(0.05, 50, cubeRenderTarget);
+    scene.add(mirrorSphereCamera);
+    const mirrorSphereMaterial = new THREE.MeshBasicMaterial({ envMap: cubeRenderTarget.texture });
+    OOI.sphere.material = mirrorSphereMaterial;
+
+    transformControls = new TransformControls(camera, renderer.domElement);
+    transformControls.size = 0.75;
+    transformControls.showX = false;
+    transformControls.space = 'world';
+    transformControls.attach(OOI.target_hand_l);
+    scene.add(transformControls);
+
+    // disable orbitControls while using transformControls
+    transformControls.addEventListener('mouseDown', () => orbitControls.enabled = false);
+    transformControls.addEventListener('mouseUp', () => orbitControls.enabled = true);
+
+    OOI.kira.add(OOI.kira.skeleton.bones[0]);
+    const iks = [
+      {
+        target: 22, // "target_hand_l"
+        effector: 6, // "hand_l"
+        links: [
+          {
+            index: 5, // "lowerarm_l"
+            rotationMin: new THREE.Vector3(1.2, - 1.8, - .4),
+            rotationMax: new THREE.Vector3(1.7, - 1.1, .3)
+          },
+          {
+            index: 4, // "Upperarm_l"
+            rotationMin: new THREE.Vector3(0.1, - 0.7, - 1.8),
+            rotationMax: new THREE.Vector3(1.1, 0, - 1.4)
+          },
+        ],
+      }
+    ];
+    IKSolver = new CCDIKSolver(OOI.kira, iks);
+    const ccdikhelper = new CCDIKHelper(OOI.kira, iks, 0.01);
+    scene.add(ccdikhelper);
+
+    gui = new GUI();
+    gui.add(conf, 'followSphere').name('follow sphere');
+    gui.add(conf, 'turnHead').name('turn head');
+    gui.add(conf, 'ik_solver').name('IK auto update');
+    gui.add(conf, 'update').name('IK manual update()');
+    gui.open();
+
+    window.addEventListener('resize', onWindowResize, false);
     // animate function
     const animate = () => {
-      boxMesh.rotation.x += 0.01;
-      boxMesh.rotation.y += 0.01;
+      if (OOI.sphere && mirrorSphereCamera) {
 
-      // gltf.scene.rotation.x += 0.01;
+        OOI.sphere.visible = false;
+        OOI.sphere.getWorldPosition(mirrorSphereCamera.position);
+        mirrorSphereCamera.update(renderer, scene);
+        OOI.sphere.visible = true;
 
-      cylinderMesh.rotation.x += 0.01;
-      cylinderMesh.rotation.y += 0.01;
+      }
 
-      // stats.update();
-      // controls.update();
+      if (OOI.sphere && conf.followSphere) {
 
+        // orbitControls follows the sphere
+        OOI.sphere.getWorldPosition(v0);
+        orbitControls.target.lerp(v0, 0.1);
+
+      }
+
+      if (OOI.head && OOI.sphere && conf.turnHead) {
+
+        // turn head
+        OOI.sphere.getWorldPosition(v0);
+        OOI.head.lookAt(v0);
+        OOI.head.rotation.set(OOI.head.rotation.x, OOI.head.rotation.y + Math.PI, OOI.head.rotation.z);
+
+      }
+
+      if (conf.ik_solver) {
+
+        updateIK();
+
+      }
+
+      orbitControls.update();
       renderer.render(scene, camera);
-      window.requestAnimationFrame(animate);
+
+      stats.update(); // fps stats
+
+      requestAnimationFrame(animate);
     };
+
+
+    const updateIK = () => {
+      if (IKSolver) IKSolver.update();
+
+      scene.traverse(function (object) {
+
+        if (object.isSkinnedMesh) object.computeBoundingSphere();
+
+      });
+    }
+
+    const onWindowResize = () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
     animate();
   }, []);
 

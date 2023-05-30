@@ -10,10 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "^1.0.9",
     "kalidokit": "^1.1.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "three": "^0.150.1"
+    "three": "^0.149.0"
   },
   "devDependencies": {
     "@types/react": "^18.0.28",

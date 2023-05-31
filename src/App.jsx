@@ -86,9 +86,9 @@ function App() {
     dlFolder.add(dl, 'intensity', 0, 1, 0.25);
     dlFolder.add(dl.position, 'y', 1, 4, 0.5);
     dlFolder.add(dl, 'castShadow');
-    dlFolder
-      .addColor(dlSettings, 'color')
-      .onChange((value) => dl.color.set(value));
+    // dlFolder
+    //   .addColor(dlSettings, 'color')
+    //   .onChange((value) => dl.color.set(value));
     dlFolder.open();
 
     // // set up spot light + helper
